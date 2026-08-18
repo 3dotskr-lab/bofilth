@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>연자 사진 등록 - 보필실 학술대회</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<style>
+  :root{
+    --pink:#f9e7eb;
+    --border:#d9d9d9;
+    --text:#222;
+    --muted:#888;
+    --accent:#c2185b;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0;
+    font-family: "Apple SD Gothic Neo","Malgun Gothic",Arial,sans-serif;
+    background:#fafafa;
+    color:var(--text);
+  }
+  header{
+    background:var(--pink);
+    padding:24px 16px;
+    text-align:center;
+    border-bottom:2px solid #000;
+  }
+  header h1{ margin:0 0 6px; font-size:20px; }
+  header p{ margin:0; color:#555; font-size:13px; line-height:1.6; }
+  main{
+    max-width:1100px;
+    margin:0 auto;
+    padding:20px 16px 80px;
+  }
+  .toolbar{
+    display:flex;
+    justify-content:flex-end;
+    gap:8px;
+    margin-bottom:16px;
+  }
+  .btn{
+    border:1px solid #ccc;
+    background:#fff;
+    padding:8px 14px;
+    border-radius:6px;
+    font-size:13px;
+    cursor:pointer;
+  }
+  .btn:hover{ background:#f2f2f2; }
+  .btn.primary{
+    background:var(--accent);
+    color:#fff;
+    border-color:var(--accent);
+  }
+  .btn.primary:hover{ background:#a71548; }
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(150px,1fr));
+    gap:16px;
+  }
+  .card{
+    background:#fff;
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:14px 10px;
+    text-align:center;
+    position:relative;
+  }
+  .photo-wrap{
+    width:90px;
+    height:90px;
+    margin:0 auto 10px;
+    border-radius:50%;
+    overflow:hidden;
+    background:var(--border);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .photo-wrap img{
+    width:100%;
+    height:100%;
+    object-fit:cover;
+    display:block;
+  }
+  .photo-wrap .placeholder{
+    font-size:11px;
+    color:#999;
+  }
+  .name{ font-weight:bold; font-size:14px; margin-bottom:2px; }
+  .aff{ font-size:11px; color:var(--muted); margin-bottom:10px; min-height:14px; line-height:1.4;}
+  .upload-label{
+    display:inline-block;
+    font-size:12px;
+    padding:6px 10px;
+    border-radius:6px;
+    border:1px solid var(--accent);
+    color:var(--accent);
+    cursor:pointer;
+    background:#fff;
+  }
+  .upload-label:hover{ background:#fdecf1; }
+  .upload-label.has-photo{ border-color:#888; color:#555; }
+  .card input[type=file]{ display:none; }
+  .status{
+    font-size:11px;
+    margin-top:6px;
+    min-height:14px;
+  }
+  .status.ok{ color:#2e7d32; }
+  .status.err{ color:#c62828; }
+  .status.busy{ color:#c2185b; }
+  .badge{
+    position:absolute;
+    top:8px;
+    right:8px;
+    font-size:10px;
+    padding:2px 6px;
+    border-radius:10px;
+    background:#eee;
+    color:#777;
+  }
+  .badge.done{ background:#e6f4ea; color:#2e7d32; }
+  footer{
+    text-align:center;
+    color:#999;
+    font-size:11px;
+    padding:20px 0;
+  }
+
+  /* modal */
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(0,0,0,.4);
+    display:none; align-items:center; justify-content:center; z-index:50;
+  }
+  .modal-backdrop.show{ display:flex; }
+  .modal{
+    background:#fff; border-radius:10px; padding:22px; width:280px;
+    text-align:center;
+  }
+  .modal h3{ margin-top:0; font-size:15px; }
+  .modal input{
+    width:100%; padding:8px; margin:10px 0; border:1px solid #ccc; border-radius:6px;
+    font-size:14px;
+  }
+  .modal .row{ display:flex; gap:8px; justify-content:center; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>연자 사진 등록</h1>
+  <p>본인 사진을 등록/수정해 주세요. 로그인 없이 이름 옆 버튼으로 바로 등록할 수 있습니다.<br>
+  이미 등록된 사진도 새 파일을 올리면 바로 교체됩니다.</p>
+</header>
+
+<main>
+  <div class="toolbar">
+    <button class="btn" id="refreshBtn">새로고침</button>
+    <button class="btn" id="downloadAllBtn">전체 사진 다운로드</button>
+  </div>
+
+  <div class="grid" id="grid"></div>
+</main>
+
+<footer>보필실 학술대회 연자 사진 등록 페이지</footer>
+
+<!-- password modal for bulk download -->
+<div class="modal-backdrop" id="pwModal">
+  <div class="modal">
+    <h3>전체 다운로드 비밀번호</h3>
+    <input type="password" id="pwInput" placeholder="비밀번호">
+    <div id="pwError" style="color:#c62828;font-size:12px;min-height:16px;"></div>
+    <div class="row">
+      <button class="btn" id="pwCancel">취소</button>
+      <button class="btn primary" id="pwOk">확인</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ====================== 설정 (Supabase) ======================
+   1) https://supabase.com 에서 무료 프로젝트 생성
+   2) Storage 에서 "speaker-photos" 버킷 생성 (Public 체크)
+   3) SQL Editor 에서 README.md 의 정책 SQL 실행
+   4) 아래 두 값을 프로젝트 값으로 교체
+   ============================================================ */
+const SUPABASE_URL = "https://YOUR-PROJECT-REF.supabase.co";
+const SUPABASE_ANON_KEY = "YOUR-ANON-PUBLIC-KEY";
+const BUCKET = "speaker-photos";
+
+/* 전체 다운로드 비밀번호 확인용 해시 (SHA-256, 평문은 저장하지 않음) */
+const DOWNLOAD_PW_HASH = "2029821043731942641be0262b7f81728a1e80ae1e54c45701dce1e70039e69e";
+
+/* ====================== 연자 목록 ====================== */
+const SPEAKERS = [
+  { id:"spk01", name:"최원석", aff:"브이성형외과" },
+  { id:"spk02", name:"이동훈", aff:"서울대피부과교수" },
+  { id:"spk03", name:"오병호", aff:"연세대피부과교수" },
+  { id:"spk04", name:"강진한", aff:"가톨릭의대교수" },
+  { id:"spk05", name:"최진미", aff:"빌리프성형외과" },
+  { id:"spk06", name:"임수성", aff:"밸런스랩성형외과" },
+  { id:"spk07", name:"김민정", aff:"신상성형외과" },
+  { id:"spk08", name:"박제영", aff:"압구정오라클피부과" },
+  { id:"spk09", name:"신지연", aff:"헤브피부과" },
+  { id:"spk10", name:"신동우", aff:"나비성형외과" },
+  { id:"spk11", name:"김영준", aff:"비올라셀성형외과" },
+  { id:"spk12", name:"인석경", aff:"도레성형외과" },
+  { id:"spk13", name:"김창열", aff:"DJ DOC" },
+  { id:"spk14", name:"최문섭", aff:"그레이스성형외과" },
+  { id:"spk15", name:"박수연", aff:"메이드영성형외과" },
+  { id:"spk16", name:"이장원", aff:"밸런스랩성형외과" },
+  { id:"spk17", name:"윤춘식", aff:"예미원피부과" },
+  { id:"spk18", name:"김창용", aff:"건국대학교 피부과" },
+  { id:"spk19", name:"원종민", aff:"청담공의원" },
+  { id:"spk20", name:"여승훈", aff:"브이성형외과" },
+  { id:"spk21", name:"우청하", aff:"플로레스피부과" },
+  { id:"spk22", name:"노낙경", aff:"리더스피부과" },
+  { id:"spk23", name:"쟈넷리", aff:"홍콩서울성형외과" },
+  { id:"spk24", name:"최승준", aff:"조아성형외과" },
+  { id:"spk25", name:"김진오", aff:"뉴헤어성형외과" },
+  { id:"spk26", name:"송종근", aff:"픽셀랩 성형외과" },
+  { id:"spk27", name:"총무", aff:"" },
+];
+
+/* ====================== 초기화 ====================== */
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const grid = document.getElementById("grid");
+
+function publicUrl(id, v){
+  const { data } = sb.storage.from(BUCKET).getPublicUrl(`photos/${id}.jpg`);
+  return data.publicUrl + (v ? `?v=${v}` : "");
+}
+
+function renderCards(){
+  grid.innerHTML = "";
+  SPEAKERS.forEach(sp => {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.id = `card-${sp.id}`;
+    card.innerHTML = `
+      <span class="badge" id="badge-${sp.id}">미등록</span>
+      <div class="photo-wrap" id="photo-${sp.id}">
+        <span class="placeholder">사진 없음</span>
+      </div>
+      <div class="name">${sp.name}</div>
+      <div class="aff">${sp.aff || ""}</div>
+      <label class="upload-label" id="label-${sp.id}">사진 등록
+        <input type="file" accept="image/*" data-id="${sp.id}">
+      </label>
+      <div class="status" id="status-${sp.id}"></div>
+    `;
+    grid.appendChild(card);
+
+    const img = new Image();
+    img.onload = () => {
+      document.getElementById(`photo-${sp.id}`).innerHTML = "";
+      document.getElementById(`photo-${sp.id}`).appendChild(img);
+      document.getElementById(`badge-${sp.id}`).textContent = "등록됨";
+      document.getElementById(`badge-${sp.id}`).classList.add("done");
+      document.getElementById(`label-${sp.id}`).textContent = "사진 수정";
+      document.getElementById(`label-${sp.id}`).classList.add("has-photo");
+      document.getElementById(`label-${sp.id}`).appendChild(fileInputFor(sp.id));
+    };
+    img.onerror = () => { /* 사진 없음 상태 유지 */ };
+    img.src = publicUrl(sp.id, Date.now());
+    img.alt = sp.name;
+    img.className = "";
+  });
+
+  document.querySelectorAll('input[type=file]').forEach(inp => {
+    inp.addEventListener("change", onFileSelected);
+  });
+}
+
+function fileInputFor(id){
+  const inp = document.createElement("input");
+  inp.type = "file";
+  inp.accept = "image/*";
+  inp.dataset.id = id;
+  inp.addEventListener("change", onFileSelected);
+  return inp;
+}
+
+async function onFileSelected(e){
+  const file = e.target.files[0];
+  const id = e.target.dataset.id;
+  if(!file) return;
+  const statusEl = document.getElementById(`status-${id}`);
+  statusEl.className = "status busy";
+  statusEl.textContent = "업로드 중...";
+
+  try{
+    const blob = await resizeToJpeg(file, 800, 0.85);
+    const path = `photos/${id}.jpg`;
+    const { error } = await sb.storage.from(BUCKET).upload(path, blob, {
+      upsert: true,
+      contentType: "image/jpeg",
+      cacheControl: "3600",
+    });
+    if(error) throw error;
+
+    const v = Date.now();
+    const wrap = document.getElementById(`photo-${id}`);
+    wrap.innerHTML = "";
+    const img = document.createElement("img");
+    img.src = publicUrl(id, v);
+    wrap.appendChild(img);
+
+    document.getElementById(`badge-${id}`).textContent = "등록됨";
+    document.getElementById(`badge-${id}`).classList.add("done");
+    document.getElementById(`label-${id}`).textContent = "사진 수정";
+    document.getElementById(`label-${id}`).classList.add("has-photo");
+    document.getElementById(`label-${id}`).appendChild(fileInputFor(id));
+
+    statusEl.className = "status ok";
+    statusEl.textContent = "등록 완료!";
+    setTimeout(() => { statusEl.textContent = ""; }, 2500);
+  }catch(err){
+    console.error(err);
+    statusEl.className = "status err";
+    statusEl.textContent = "업로드 실패: " + (err.message || err);
+  }
+}
+
+/* 이미지를 최대 800px, JPEG(품질 0.85)로 축소/변환 */
+function resizeToJpeg(file, maxSize, quality){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("파일을 읽을 수 없습니다"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("이미지 파일이 아닙니다"));
+      img.onload = () => {
+        let { width, height } = img;
+        if(width > height && width > maxSize){
+          height = Math.round(height * (maxSize / width));
+          width = maxSize;
+        }else if(height > maxSize){
+          width = Math.round(width * (maxSize / height));
+          height = maxSize;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0,0,width,height);
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(b => {
+          if(!b) return reject(new Error("이미지 변환 실패"));
+          resolve(b);
+        }, "image/jpeg", quality);
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+document.getElementById("refreshBtn").addEventListener("click", renderCards);
+
+/* ====================== 전체 다운로드 (비밀번호) ====================== */
+const pwModal = document.getElementById("pwModal");
+const pwInput = document.getElementById("pwInput");
+const pwError = document.getElementById("pwError");
+
+document.getElementById("downloadAllBtn").addEventListener("click", () => {
+  pwInput.value = "";
+  pwError.textContent = "";
+  pwModal.classList.add("show");
+  pwInput.focus();
+});
+document.getElementById("pwCancel").addEventListener("click", () => {
+  pwModal.classList.remove("show");
+});
+pwInput.addEventListener("keydown", (e) => { if(e.key === "Enter") document.getElementById("pwOk").click(); });
+
+document.getElementById("pwOk").addEventListener("click", async () => {
+  let hash;
+  try{
+    hash = await sha256(pwInput.value);
+  }catch(err){
+    console.error(err);
+    pwError.textContent = "이 브라우저/환경에서는 비밀번호 확인을 사용할 수 없습니다 (https 주소에서 이용해 주세요).";
+    return;
+  }
+  if(hash !== DOWNLOAD_PW_HASH){
+    pwError.textContent = "비밀번호가 올바르지 않습니다.";
+    return;
+  }
+  pwModal.classList.remove("show");
+  await downloadAllPhotos();
+});
+
+async function sha256(text){
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,"0")).join("");
+}
+
+async function downloadAllPhotos(){
+  const btn = document.getElementById("downloadAllBtn");
+  const original = btn.textContent;
+  btn.textContent = "다운로드 준비 중...";
+  btn.disabled = true;
+  try{
+    const zip = new JSZip();
+    let count = 0;
+    for(const sp of SPEAKERS){
+      const url = publicUrl(sp.id, Date.now());
+      try{
+        const res = await fetch(url, { cache: "no-store" });
+        if(!res.ok) continue;
+        const blob = await res.blob();
+        zip.file(`${sp.id}_${sp.name}.jpg`, blob);
+        count++;
+      }catch(_){ /* 사진 없는 연자는 건너뜀 */ }
+    }
+    if(count === 0){
+      alert("등록된 사진이 아직 없습니다.");
+      return;
+    }
+    const content = await zip.generateAsync({ type: "blob" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(content);
+    a.download = "연자사진_전체.zip";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }catch(err){
+    console.error(err);
+    alert("다운로드 중 오류가 발생했습니다: " + (err.message || err));
+  }finally{
+    btn.textContent = original;
+    btn.disabled = false;
+  }
+}
+
+renderCards();
+</script>
+</body>
+</html>
