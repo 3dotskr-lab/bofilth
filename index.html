@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>2026 보필실 추계 심포지움 연자 사진 등록</title>
+<title>2026 보필실 추계 심포지움 연자 사진&초록집 등록</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
@@ -67,7 +67,7 @@
   .btn.primary:hover{ background:#a71548; }
   .grid{
     display:grid;
-    grid-template-columns:repeat(auto-fill, minmax(150px,1fr));
+    grid-template-columns:repeat(auto-fill, minmax(170px,1fr));
     gap:16px;
   }
   .card{
@@ -113,6 +113,13 @@
   }
   .upload-label:hover{ background:#fdecf1; }
   .upload-label.has-photo{ border-color:#888; color:#555; }
+  .upload-label.abstract{
+    border-color:#1565c0;
+    color:#1565c0;
+    margin-top:6px;
+  }
+  .upload-label.abstract:hover{ background:#e8f1fb; }
+  .upload-label.abstract.has-photo{ border-color:#888; color:#555; }
   .card input[type=file]{ display:none; }
   .status{
     font-size:11px;
@@ -122,15 +129,20 @@
   .status.ok{ color:#2e7d32; }
   .status.err{ color:#c62828; }
   .status.busy{ color:#c2185b; }
+  .badges{
+    display:flex;
+    flex-wrap:wrap;
+    gap:4px;
+    justify-content:center;
+    margin-bottom:10px;
+  }
   .badge{
-    position:absolute;
-    top:8px;
-    right:8px;
     font-size:10px;
     padding:2px 6px;
     border-radius:10px;
     background:#eee;
     color:#777;
+    white-space:nowrap;
   }
   .badge.done{ background:#e6f4ea; color:#2e7d32; }
   footer{
@@ -161,7 +173,7 @@
 <body>
 
 <header>
-  <h1>2026 보필실 추계 심포지움 연자 사진 등록</h1>
+  <h1>2026 보필실 추계 심포지움 연자 사진&amp;초록집 등록</h1>
   <p>연자 사진을 등록/수정해 주세요. [사진등록]을 클릭해 바로 등록할 수 있습니다.<br>
   이미 등록된 사진도 새 파일을 올리면 바로 교체됩니다.</p>
   <p class="notice">📢 모든 연자 사진이 등록되면 심포지움 신청 페이지에 일괄적으로 업데이트됩니다.</p>
@@ -171,6 +183,7 @@
   <div class="toolbar">
     <button class="btn" id="refreshBtn">새로고침</button>
     <button class="btn" id="downloadAllBtn">전체 사진 다운로드</button>
+    <button class="btn" id="downloadAbstractsBtn">전체 초록집 다운로드</button>
   </div>
 
   <div class="grid" id="grid"></div>
@@ -203,7 +216,7 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const BUCKET = "speaker-photos";
 
 /* 전체 다운로드 비밀번호 확인용 해시 (SHA-256, 평문은 저장하지 않음) */
-const DOWNLOAD_PW_HASH = "2029821043731942641be0262b7f81728a1e80ae1e54c45701dce1e70039e69e";
+const DOWNLOAD_PW_HASH = "02d72eadb8fe6391e36b11ca3f50b7f13347c8ec1260654c99e669495a573fc5";
 
 /* ====================== 연자 목록 ====================== */
 const SPEAKERS = [
@@ -213,7 +226,7 @@ const SPEAKERS = [
   { id:"spk04", name:"강진한", aff:"가톨릭의대교수" },
   { id:"spk05", name:"최진미", aff:"빌리프성형외과" },
   { id:"spk06", name:"임수성", aff:"밸런스랩성형외과" },
-  { id:"spk07", name:"김민정", aff:"신상성형외과" },
+  { id:"spk07", name:"배재현", aff:"아이루미성형외과" },
   { id:"spk08", name:"박제영", aff:"압구정오라클피부과" },
   { id:"spk09", name:"신지연", aff:"헤브피부과" },
   { id:"spk10", name:"신동우", aff:"나비성형외과" },
@@ -238,26 +251,93 @@ const SPEAKERS = [
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const grid = document.getElementById("grid");
 
+/* 초록집 허용 확장자 <-> MIME (양방향 1:1) */
+const ABSTRACT_MIME = {
+  pdf:  "application/pdf",
+  doc:  "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ppt:  "application/vnd.ms-powerpoint",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  zip:  "application/zip",
+};
+const MIME_TO_EXT = Object.fromEntries(
+  Object.entries(ABSTRACT_MIME).map(([ext, mime]) => [mime, ext])
+);
+const ABSTRACT_ACCEPT = ".pdf,.doc,.docx,.ppt,.pptx,.zip";
+const MAX_ABSTRACT_MB = 50;
+
+/* 초록집은 확장자 없는 고정 키에 저장한다.
+   덮어쓰기 시 항상 같은 키라 이전 파일이 남지 않으며,
+   실제 확장자는 저장된 mimetype 으로 복원한다. */
+function photoPath(id){ return `photos/${id}.jpg`; }
+function abstractPath(id){ return `abstracts/${id}`; }
+
 function publicUrl(id, v){
-  const { data } = sb.storage.from(BUCKET).getPublicUrl(`photos/${id}.jpg`);
+  const { data } = sb.storage.from(BUCKET).getPublicUrl(photoPath(id));
+  return data.publicUrl + (v ? `?v=${v}` : "");
+}
+function abstractUrl(id, v){
+  const { data } = sb.storage.from(BUCKET).getPublicUrl(abstractPath(id));
   return data.publicUrl + (v ? `?v=${v}` : "");
 }
 
-function renderCards(){
+/* abstracts 폴더를 한 번만 조회해서 id -> ext 맵을 만든다 */
+async function fetchAbstractMap(){
+  const map = {};
+  try{
+    const { data, error } = await sb.storage.from(BUCKET).list("abstracts", { limit: 1000 });
+    if(error) throw error;
+    (data || []).forEach(o => {
+      const ext = MIME_TO_EXT[o.metadata && o.metadata.mimetype];
+      if(ext) map[o.name] = ext;
+    });
+  }catch(err){
+    console.error("초록집 목록 조회 실패", err);
+  }
+  return map;
+}
+
+function setPhotoRegistered(id){
+  const b = document.getElementById(`pbadge-${id}`);
+  b.textContent = "사진 등록됨";
+  b.classList.add("done");
+  const l = document.getElementById(`label-${id}`);
+  l.textContent = "사진 수정";
+  l.classList.add("has-photo");
+  l.appendChild(photoInputFor(id));
+}
+
+function setAbstractRegistered(id, ext){
+  const b = document.getElementById(`abadge-${id}`);
+  b.textContent = `초록집 등록됨${ext ? " ("+ext+")" : ""}`;
+  b.classList.add("done");
+  const l = document.getElementById(`alabel-${id}`);
+  l.textContent = "초록집 수정";
+  l.classList.add("has-photo");
+  l.appendChild(abstractInputFor(id));
+}
+
+async function renderCards(){
   grid.innerHTML = "";
   SPEAKERS.forEach(sp => {
     const card = document.createElement("div");
     card.className = "card";
     card.id = `card-${sp.id}`;
     card.innerHTML = `
-      <span class="badge" id="badge-${sp.id}">미등록</span>
+      <div class="badges">
+        <span class="badge" id="pbadge-${sp.id}">사진 미등록</span>
+        <span class="badge" id="abadge-${sp.id}">초록집 미등록</span>
+      </div>
       <div class="photo-wrap" id="photo-${sp.id}">
         <span class="placeholder">사진 없음</span>
       </div>
       <div class="name">${sp.name}</div>
       <div class="aff">${sp.aff || ""}</div>
       <label class="upload-label" id="label-${sp.id}">사진 등록
-        <input type="file" accept="image/*" data-id="${sp.id}">
+        <input type="file" accept="image/*" data-id="${sp.id}" data-kind="photo">
+      </label>
+      <label class="upload-label abstract" id="alabel-${sp.id}">초록집 등록
+        <input type="file" accept="${ABSTRACT_ACCEPT}" data-id="${sp.id}" data-kind="abstract">
       </label>
       <div class="status" id="status-${sp.id}"></div>
     `;
@@ -265,65 +345,53 @@ function renderCards(){
 
     const img = new Image();
     img.onload = () => {
-      document.getElementById(`photo-${sp.id}`).innerHTML = "";
-      document.getElementById(`photo-${sp.id}`).appendChild(img);
-      document.getElementById(`badge-${sp.id}`).textContent = "등록됨";
-      document.getElementById(`badge-${sp.id}`).classList.add("done");
-      document.getElementById(`label-${sp.id}`).textContent = "사진 수정";
-      document.getElementById(`label-${sp.id}`).classList.add("has-photo");
-      document.getElementById(`label-${sp.id}`).appendChild(fileInputFor(sp.id));
+      const wrap = document.getElementById(`photo-${sp.id}`);
+      wrap.innerHTML = "";
+      wrap.appendChild(img);
+      setPhotoRegistered(sp.id);
     };
     img.onerror = () => { /* 사진 없음 상태 유지 */ };
     img.src = publicUrl(sp.id, Date.now());
     img.alt = sp.name;
-    img.className = "";
   });
 
-  document.querySelectorAll('input[type=file]').forEach(inp => {
+  grid.querySelectorAll('input[type=file]').forEach(inp => {
     inp.addEventListener("change", onFileSelected);
+  });
+
+  const amap = await fetchAbstractMap();
+  SPEAKERS.forEach(sp => {
+    if(amap[sp.id]) setAbstractRegistered(sp.id, amap[sp.id]);
   });
 }
 
-function fileInputFor(id){
+function makeInput(id, kind, accept){
   const inp = document.createElement("input");
   inp.type = "file";
-  inp.accept = "image/*";
+  inp.accept = accept;
   inp.dataset.id = id;
+  inp.dataset.kind = kind;
   inp.addEventListener("change", onFileSelected);
   return inp;
 }
+function photoInputFor(id){ return makeInput(id, "photo", "image/*"); }
+function abstractInputFor(id){ return makeInput(id, "abstract", ABSTRACT_ACCEPT); }
 
 async function onFileSelected(e){
   const file = e.target.files[0];
   const id = e.target.dataset.id;
+  const kind = e.target.dataset.kind;
   if(!file) return;
   const statusEl = document.getElementById(`status-${id}`);
   statusEl.className = "status busy";
   statusEl.textContent = "업로드 중...";
 
   try{
-    const blob = await resizeToJpeg(file, 800, 0.85);
-    const path = `photos/${id}.jpg`;
-    const { error } = await sb.storage.from(BUCKET).upload(path, blob, {
-      upsert: true,
-      contentType: "image/jpeg",
-      cacheControl: "3600",
-    });
-    if(error) throw error;
-
-    const v = Date.now();
-    const wrap = document.getElementById(`photo-${id}`);
-    wrap.innerHTML = "";
-    const img = document.createElement("img");
-    img.src = publicUrl(id, v);
-    wrap.appendChild(img);
-
-    document.getElementById(`badge-${id}`).textContent = "등록됨";
-    document.getElementById(`badge-${id}`).classList.add("done");
-    document.getElementById(`label-${id}`).textContent = "사진 수정";
-    document.getElementById(`label-${id}`).classList.add("has-photo");
-    document.getElementById(`label-${id}`).appendChild(fileInputFor(id));
-
+    if(kind === "abstract"){
+      await uploadAbstract(id, file);
+    }else{
+      await uploadPhoto(id, file);
+    }
     statusEl.className = "status ok";
     statusEl.textContent = "등록 완료!";
     setTimeout(() => { statusEl.textContent = ""; }, 2500);
@@ -331,7 +399,44 @@ async function onFileSelected(e){
     console.error(err);
     statusEl.className = "status err";
     statusEl.textContent = "업로드 실패: " + (err.message || err);
+  }finally{
+    e.target.value = "";
   }
+}
+
+async function uploadPhoto(id, file){
+  const blob = await resizeToJpeg(file, 800, 0.85);
+  const { error } = await sb.storage.from(BUCKET).upload(photoPath(id), blob, {
+    upsert: true,
+    contentType: "image/jpeg",
+    cacheControl: "3600",
+  });
+  if(error) throw error;
+
+  const wrap = document.getElementById(`photo-${id}`);
+  wrap.innerHTML = "";
+  const img = document.createElement("img");
+  img.src = publicUrl(id, Date.now());
+  wrap.appendChild(img);
+  setPhotoRegistered(id);
+}
+
+async function uploadAbstract(id, file){
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  const mime = ABSTRACT_MIME[ext];
+  if(!mime){
+    throw new Error("ppt, pptx, doc, docx, pdf, zip 파일만 등록할 수 있습니다");
+  }
+  if(file.size > MAX_ABSTRACT_MB * 1024 * 1024){
+    throw new Error(`파일이 너무 큽니다 (최대 ${MAX_ABSTRACT_MB}MB)`);
+  }
+  const { error } = await sb.storage.from(BUCKET).upload(abstractPath(id), file, {
+    upsert: true,
+    contentType: mime,
+    cacheControl: "no-cache",
+  });
+  if(error) throw error;
+  setAbstractRegistered(id, ext);
 }
 
 /* 이미지를 최대 800px, JPEG(품질 0.85)로 축소/변환 */
@@ -376,11 +481,21 @@ const pwModal = document.getElementById("pwModal");
 const pwInput = document.getElementById("pwInput");
 const pwError = document.getElementById("pwError");
 
-document.getElementById("downloadAllBtn").addEventListener("click", () => {
+let pendingDownload = null;
+
+function askPassword(fn){
+  pendingDownload = fn;
   pwInput.value = "";
   pwError.textContent = "";
   pwModal.classList.add("show");
   pwInput.focus();
+}
+
+document.getElementById("downloadAllBtn").addEventListener("click", () => {
+  askPassword(downloadAllPhotos);
+});
+document.getElementById("downloadAbstractsBtn").addEventListener("click", () => {
+  askPassword(downloadAllAbstracts);
 });
 document.getElementById("pwCancel").addEventListener("click", () => {
   pwModal.classList.remove("show");
@@ -401,7 +516,9 @@ document.getElementById("pwOk").addEventListener("click", async () => {
     return;
   }
   pwModal.classList.remove("show");
-  await downloadAllPhotos();
+  const fn = pendingDownload;
+  pendingDownload = null;
+  if(fn) await fn();
 });
 
 async function sha256(text){
@@ -431,13 +548,7 @@ async function downloadAllPhotos(){
       alert("등록된 사진이 아직 없습니다.");
       return;
     }
-    const content = await zip.generateAsync({ type: "blob" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(content);
-    a.download = "연자사진_전체.zip";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    await saveZip(zip, "연자사진_전체.zip");
   }catch(err){
     console.error(err);
     alert("다운로드 중 오류가 발생했습니다: " + (err.message || err));
@@ -445,6 +556,51 @@ async function downloadAllPhotos(){
     btn.textContent = original;
     btn.disabled = false;
   }
+}
+
+async function downloadAllAbstracts(){
+  const btn = document.getElementById("downloadAbstractsBtn");
+  const original = btn.textContent;
+  btn.textContent = "다운로드 준비 중...";
+  btn.disabled = true;
+  try{
+    const amap = await fetchAbstractMap();
+    const zip = new JSZip();
+    let count = 0;
+    for(const sp of SPEAKERS){
+      const ext = amap[sp.id];
+      if(!ext) continue;
+      try{
+        const res = await fetch(abstractUrl(sp.id, Date.now()), { cache: "no-store" });
+        if(!res.ok) continue;
+        zip.file(`${sp.id}_${sp.name}.${ext}`, await res.blob());
+        count++;
+      }catch(_){ /* 실패한 항목은 건너뜀 */ }
+    }
+    if(count === 0){
+      alert("등록된 초록집이 아직 없습니다.");
+      return;
+    }
+    await saveZip(zip, "연자초록집_전체.zip");
+  }catch(err){
+    console.error(err);
+    alert("다운로드 중 오류가 발생했습니다: " + (err.message || err));
+  }finally{
+    btn.textContent = original;
+    btn.disabled = false;
+  }
+}
+
+async function saveZip(zip, filename){
+  const content = await zip.generateAsync({ type: "blob" });
+  const url = URL.createObjectURL(content);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
 renderCards();
