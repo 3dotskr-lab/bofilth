@@ -44,11 +44,57 @@
     margin:0 auto;
     padding:20px 16px 80px;
   }
+  .status-bar{
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:space-between;
+    align-items:center;
+    gap:16px;
+    padding-bottom:16px;
+    margin-bottom:20px;
+    border-bottom:1px solid #e5e5e5;
+  }
+  .progress-group{
+    display:flex;
+    flex-wrap:wrap;
+    gap:20px;
+  }
+  .progress-block{
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .progress-label{
+    font-size:12.5px;
+    font-weight:600;
+    color:#444;
+    white-space:nowrap;
+  }
+  .progress-track{
+    width:120px;
+    height:8px;
+    background:#e8e8e8;
+    border-radius:4px;
+    overflow:hidden;
+  }
+  .progress-fill{
+    height:100%;
+    width:0%;
+    background:#2e7d32;
+    border-radius:4px;
+    transition:width .3s ease;
+  }
+  .progress-count{
+    font-size:12.5px;
+    font-weight:600;
+    color:#444;
+    white-space:nowrap;
+  }
   .toolbar{
     display:flex;
+    flex-wrap:wrap;
     justify-content:flex-end;
     gap:8px;
-    margin-bottom:16px;
   }
   .btn{
     border:1px solid #ccc;
@@ -77,6 +123,10 @@
     padding:14px 10px;
     text-align:center;
     position:relative;
+  }
+  .card.has-abstract{
+    border-color:#8fd6a6;
+    background:#f8fffa;
   }
   .photo-wrap{
     width:90px;
@@ -113,44 +163,74 @@
   }
   .upload-label:hover{ background:#fdecf1; }
   .upload-label.has-photo{ border-color:#888; color:#555; }
-  .upload-label.abstract{
-    border-color:#1565c0;
-    color:#1565c0;
-  }
-  .upload-label.abstract:hover{ background:#e8f1fb; }
-  .upload-label.abstract.has-photo{ border-color:#888; color:#555; }
   .card input[type=file]{ display:none; }
-  .abstract-row{
+  .abstract-slot{ margin-top:6px; }
+  .abstract-empty{
     display:flex;
-    gap:6px;
     align-items:center;
     justify-content:center;
-    margin-top:6px;
-  }
-  .del-btn{
-    flex:0 0 auto;
-    width:26px;
-    height:26px;
-    border-radius:6px;
-    border:1px solid #c62828;
+    gap:5px;
+    width:100%;
+    padding:8px 6px;
+    border:1.5px dashed #8ea6d9;
+    border-radius:8px;
+    color:#4a63a3;
+    font-size:12px;
+    cursor:pointer;
     background:#fff;
-    color:#c62828;
-    font-size:13px;
-    line-height:1;
+  }
+  .abstract-empty:hover{ background:#f3f6fc; }
+  .abstract-panel{
+    background:#eafaf0;
+    border:1px solid #b6e6c4;
+    border-radius:8px;
+    padding:10px;
+    text-align:left;
+  }
+  .abstract-panel .caption{
+    font-size:10.5px;
+    font-weight:600;
+    color:#2e7d32;
+    margin-bottom:4px;
+  }
+  .abstract-panel .filename{
+    font-size:12px;
+    color:#222;
+    line-height:1.35;
+    display:-webkit-box;
+    -webkit-line-clamp:2;
+    -webkit-box-orient:vertical;
+    overflow:hidden;
+    word-break:break-all;
+  }
+  .abstract-actions{
+    display:flex;
+    gap:6px;
+    margin-top:8px;
+  }
+  .abstract-actions .replace-btn{
+    flex:1;
+    text-align:center;
+    background:#1565c0;
+    color:#fff;
+    border:none;
+    border-radius:6px;
+    padding:7px 0;
+    font-size:12px;
     cursor:pointer;
   }
-  .del-btn:hover{ background:#fdeaea; }
-  .del-btn[hidden]{ display:none; }
-  .abstract-filename{
-    font-size:10.5px;
-    color:#666;
-    margin-top:4px;
-    padding:0 4px;
-    max-width:100%;
-    overflow:hidden;
-    text-overflow:ellipsis;
-    white-space:nowrap;
+  .abstract-actions .replace-btn:hover{ background:#0d47a1; }
+  .abstract-actions .del-btn{
+    flex:0 0 auto;
+    padding:7px 12px;
+    border:1px solid #c62828;
+    color:#c62828;
+    background:#fff;
+    border-radius:6px;
+    font-size:12px;
+    cursor:pointer;
   }
+  .abstract-actions .del-btn:hover{ background:#fdeaea; }
   .status{
     font-size:11px;
     margin-top:6px;
@@ -168,10 +248,11 @@
   }
   .badge{
     font-size:10px;
-    padding:2px 6px;
+    font-weight:600;
+    padding:3px 8px;
     border-radius:10px;
-    background:#eee;
-    color:#777;
+    background:#fdecc8;
+    color:#a1660a;
     white-space:nowrap;
   }
   .badge.done{ background:#e6f4ea; color:#2e7d32; }
@@ -210,10 +291,24 @@
 </header>
 
 <main>
-  <div class="toolbar">
-    <button class="btn" id="refreshBtn">새로고침</button>
-    <button class="btn" id="downloadAllBtn">전체 사진 다운로드</button>
-    <button class="btn" id="downloadAbstractsBtn">전체 초록집 다운로드</button>
+  <div class="status-bar">
+    <div class="progress-group">
+      <div class="progress-block">
+        <span class="progress-label">사진 등록 현황</span>
+        <div class="progress-track"><div class="progress-fill" id="photoProgressFill"></div></div>
+        <span class="progress-count" id="photoProgressCount">0 / 0</span>
+      </div>
+      <div class="progress-block">
+        <span class="progress-label">초록집 등록 현황</span>
+        <div class="progress-track"><div class="progress-fill" id="abstractProgressFill"></div></div>
+        <span class="progress-count" id="abstractProgressCount">0 / 0</span>
+      </div>
+    </div>
+    <div class="toolbar">
+      <button class="btn" id="refreshBtn">새로고침</button>
+      <button class="btn" id="downloadAllBtn">전체 사진 다운로드</button>
+      <button class="btn" id="downloadAbstractsBtn">전체 초록집 다운로드</button>
+    </div>
   </div>
 
   <div class="grid" id="grid"></div>
@@ -346,34 +441,67 @@ function setPhotoRegistered(id){
   l.textContent = "사진 수정";
   l.classList.add("has-photo");
   l.appendChild(photoInputFor(id));
+  updateProgress();
+}
+
+/* 초록집 슬롯 HTML 조각. 파일명은 사용자가 지정한 값이라 innerHTML에 직접
+   넣지 않고, 교체 후 별도로 textContent 로 채운다 (XSS 방지). */
+function abstractEmptyHtml(id){
+  return `
+    <label class="abstract-empty" id="alabel-${id}">
+      <span>+</span> 초록집 등록
+      <input type="file" accept="${ABSTRACT_ACCEPT}" data-id="${id}" data-kind="abstract">
+    </label>
+  `;
+}
+function abstractPanelHtml(id){
+  return `
+    <div class="abstract-panel">
+      <div class="caption">📄 등록된 초록집</div>
+      <div class="filename" id="afile-${id}"></div>
+      <div class="abstract-actions">
+        <label class="replace-btn" id="alabel-${id}">파일 교체
+          <input type="file" accept="${ABSTRACT_ACCEPT}" data-id="${id}" data-kind="abstract">
+        </label>
+        <button type="button" class="del-btn" data-id="${id}">삭제</button>
+      </div>
+    </div>
+  `;
 }
 
 function setAbstractRegistered(id, filename){
-  const b = document.getElementById(`abadge-${id}`);
-  b.textContent = "초록집 등록됨";
-  b.classList.add("done");
-  const l = document.getElementById(`alabel-${id}`);
-  l.textContent = "초록집 수정";
-  l.classList.add("has-photo");
-  l.appendChild(abstractInputFor(id));
+  document.getElementById(`abadge-${id}`).textContent = "초록집 등록됨";
+  document.getElementById(`abadge-${id}`).classList.add("done");
+  document.getElementById(`card-${id}`).classList.add("has-abstract");
+  document.getElementById(`aslot-${id}`).innerHTML = abstractPanelHtml(id);
   const f = document.getElementById(`afile-${id}`);
   f.textContent = filename;
   f.title = filename;
-  document.getElementById(`adel-${id}`).hidden = false;
+  updateProgress();
 }
 
 function setAbstractUnregistered(id){
-  const b = document.getElementById(`abadge-${id}`);
-  b.textContent = "초록집 미등록";
-  b.classList.remove("done");
-  const l = document.getElementById(`alabel-${id}`);
-  l.textContent = "초록집 등록";
-  l.classList.remove("has-photo");
-  l.appendChild(abstractInputFor(id));
-  const f = document.getElementById(`afile-${id}`);
-  f.textContent = "";
-  f.title = "";
-  document.getElementById(`adel-${id}`).hidden = true;
+  document.getElementById(`abadge-${id}`).textContent = "초록집 미등록";
+  document.getElementById(`abadge-${id}`).classList.remove("done");
+  document.getElementById(`card-${id}`).classList.remove("has-abstract");
+  document.getElementById(`aslot-${id}`).innerHTML = abstractEmptyHtml(id);
+  updateProgress();
+}
+
+function updateProgress(){
+  const total = SPEAKERS.length;
+  let photoDone = 0, abstractDone = 0;
+  SPEAKERS.forEach(sp => {
+    if(document.getElementById(`pbadge-${sp.id}`).classList.contains("done")) photoDone++;
+    if(document.getElementById(`abadge-${sp.id}`).classList.contains("done")) abstractDone++;
+  });
+  setProgressUI("photo", photoDone, total);
+  setProgressUI("abstract", abstractDone, total);
+}
+function setProgressUI(kind, done, total){
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  document.getElementById(`${kind}ProgressFill`).style.width = pct + "%";
+  document.getElementById(`${kind}ProgressCount`).textContent = `${done} / ${total}`;
 }
 
 async function renderCards(){
@@ -395,13 +523,7 @@ async function renderCards(){
       <label class="upload-label" id="label-${sp.id}">사진 등록
         <input type="file" accept="image/*" data-id="${sp.id}" data-kind="photo">
       </label>
-      <div class="abstract-row">
-        <label class="upload-label abstract" id="alabel-${sp.id}">초록집 등록
-          <input type="file" accept="${ABSTRACT_ACCEPT}" data-id="${sp.id}" data-kind="abstract">
-        </label>
-        <button type="button" class="del-btn" id="adel-${sp.id}" data-id="${sp.id}" title="초록집 삭제" hidden>✕</button>
-      </div>
-      <div class="abstract-filename" id="afile-${sp.id}"></div>
+      <div class="abstract-slot" id="aslot-${sp.id}">${abstractEmptyHtml(sp.id)}</div>
       <div class="status" id="status-${sp.id}"></div>
     `;
     grid.appendChild(card);
@@ -418,9 +540,7 @@ async function renderCards(){
     img.alt = sp.name;
   });
 
-  grid.querySelectorAll('input[type=file]').forEach(inp => {
-    inp.addEventListener("change", onFileSelected);
-  });
+  updateProgress();
 
   const amap = await fetchAbstractMap();
   SPEAKERS.forEach(sp => {
@@ -428,23 +548,27 @@ async function renderCards(){
   });
 }
 
+/* 사진/초록집 슬롯이 innerHTML로 통째로 교체되므로, input 마다 개별로
+   리스너를 붙이지 않고 grid 레벨에서 위임 처리한다 (change/click 모두 버블링됨). */
+grid.addEventListener("change", (e) => {
+  const inp = e.target.closest('input[type=file]');
+  if(!inp) return;
+  onFileSelected({ target: inp });
+});
 grid.addEventListener("click", (e) => {
   const btn = e.target.closest(".del-btn");
   if(!btn) return;
   deleteAbstract(btn.dataset.id);
 });
 
-function makeInput(id, kind, accept){
+function photoInputFor(id){
   const inp = document.createElement("input");
   inp.type = "file";
-  inp.accept = accept;
+  inp.accept = "image/*";
   inp.dataset.id = id;
-  inp.dataset.kind = kind;
-  inp.addEventListener("change", onFileSelected);
+  inp.dataset.kind = "photo";
   return inp;
 }
-function photoInputFor(id){ return makeInput(id, "photo", "image/*"); }
-function abstractInputFor(id){ return makeInput(id, "abstract", ABSTRACT_ACCEPT); }
 
 async function onFileSelected(e){
   const file = e.target.files[0];
