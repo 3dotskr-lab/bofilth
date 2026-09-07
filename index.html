@@ -867,7 +867,8 @@ async function downloadAllAbstracts(){
       try{
         const res = await fetch(abstractUrl(sp.id, Date.now()), { cache: "no-store" });
         if(!res.ok) continue;
-        zip.file(`${sp.id}_${sp.name}.${entry.ext}`, await res.blob());
+        const base = `${sp.id}_${sp.name}`;
+        zip.file(entry.ext ? `${base}.${entry.ext}` : base, await res.blob());
         count++;
       }catch(_){ /* 실패한 항목은 건너뜀 */ }
     }
