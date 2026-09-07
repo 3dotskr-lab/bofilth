@@ -404,12 +404,16 @@ const ABSTRACT_MIME = {
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   ppt:  "application/vnd.ms-powerpoint",
   pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  hwp:  "application/x-hwp",
+  hwpx: "application/x-hwpx",
   zip:  "application/zip",
 };
 const MIME_TO_EXT = Object.fromEntries(
   Object.entries(ABSTRACT_MIME).map(([ext, mime]) => [mime, ext])
 );
-const ABSTRACT_ACCEPT = ".pdf,.doc,.docx,.ppt,.pptx,.zip";
+/* 허용 목록이 서로 어긋나지 않도록 위 맵에서 파생시킨다 */
+const ABSTRACT_EXTS = Object.keys(ABSTRACT_MIME);
+const ABSTRACT_ACCEPT = ABSTRACT_EXTS.map(e => "." + e).join(",");
 const MAX_ABSTRACT_MB = 50;
 
 /* 초록집은 확장자 없는 고정 키에 저장한다.
@@ -686,7 +690,7 @@ async function uploadAbstract(id, file){
   const ext = (file.name.split(".").pop() || "").toLowerCase();
   const mime = ABSTRACT_MIME[ext];
   if(!mime){
-    throw new Error("ppt, pptx, doc, docx, pdf, zip 파일만 등록할 수 있습니다");
+    throw new Error(`${ABSTRACT_EXTS.join(", ")} 파일만 등록할 수 있습니다`);
   }
   if(file.size > MAX_ABSTRACT_MB * 1024 * 1024){
     throw new Error(`파일이 너무 큽니다 (최대 ${MAX_ABSTRACT_MB}MB)`);
